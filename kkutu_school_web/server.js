@@ -4,6 +4,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const crypto = require("crypto");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,19 +14,45 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
 
-// 단어장
+// =====================================
+// 1. 단어장 설정
+// =====================================
+
 const dictionary = new Set(
-  ("사과 과자 자동차 차표 표범 범인 인형 형사 사자 자전거 거미 미술 술잔 잔디 디지털 털실 실내 내일 일기 기차 차례 예술 술집 집게 게살 살구 구름 름?")
-    .split(" ")
+  (
+    "사과 과자 자동차 차표 표범 범인 인형 형사 사자 자전거 거미 미술 술잔 잔디 디지털 털실 실내 내일 일기 기차 차례 예술 술집 집게 게살 살구 구름"
+  ).split(" ")
 );
 
 const starterWords = (
-  "학교 교실 학생 선생님 컴퓨터 인터넷 게임 끄투 온라인 친구 가족 사랑 마음 바다 하늘 구름 나무 꽃 사과 바나나 포도 수박 딸기 과일 음식 라면 떡볶이 김밥 치킨 피자 햄버거 우유 물고기 고양이 강아지 토끼 사자 호랑이 코끼리 기린 원숭이 다람쥐 자동차 자전거 비행기 기차 버스 지하철 택시 도로 신호등 건물 아파트 집 방 책상 의자 책 공책 연필 지우개 가방 시계 전화기 카메라 사진 음악 노래 영화 드라마 만화 게임 운동 축구 농구 야구 배구 수영 달리기 체육 과학 수학 국어 영어 역사 지리 우주 행성 별 달 태양 지구 화성 은하 로봇 인공지능 데이터 알고리즘 코드 프로그램 개발자 컴퓨터공학 전기 전자 반도체 에너지 환경 기후 날씨 비 눈 바람 태풍 번개 무지개 겨울 여름 봄 가을 꽃밭 숲 나뭇잎 열매 씨앗 바위 강 호수 바다섬 해변 모래 조개 고래 상어 문어 오징어 새우 게 거북이 펭귄 독수리 참새 비둘기 나비 벌 개미 거미 잠자리 매미 풀 나무 대나무 소나무 장미 튤립 해바라기 국화 백합 민들레"
+  "학교 교실 학생 선생님 컴퓨터 인터넷 게임 끄투 온라인 친구 가족 사랑 마음 바다 하늘 구름 나무 꽃 사과 바나나 포도 수박 딸기 과일 음식 라면 떡볶이 김밥 치킨 피자 햄버거 우유 물고기 고양이 강아지 토끼 사자 호랑이 코끼리 기린 원숭이 다람쥐 자동차 자전거 비행기 기차 버스 지하철 택시 도로 신호등 건물 아파트 집 방 책상 의자 책 공책 연필 지우개 가방 시계 전화기 카메라 사진 음악 노래 영화 드라마 만화 운동 축구 농구 야구 배구 수영 달리기 체육 과학 수학 국어 영어 역사 지리 우주 행성 별 달 태양 지구 화성 은하 로봇 인공지능 데이터 알고리즘 코드 프로그램 개발자 컴퓨터공학 전기 전자 반도체 에너지 환경 기후 날씨 비 눈 바람 태풍 번개 무지개 겨울 여름 봄 가을 꽃밭 숲 나뭇잎 열매 씨앗 바위 강 호수 바다섬 해변 모래 조개 고래 상어 문어 오징어 새우 게 거북이 펭귄 독수리 참새 비둘기 나비 벌 개미 잠자리 매미 풀 대나무 소나무 장미 튤립 해바라기 국화 백합 민들레"
 ).split(" ");
 
 starterWords.forEach(w => dictionary.add(w));
 
-// 단어 정리
+// 외부 단어장 불러오기
+const wordFilePath = path.join(__dirname, "words.txt");
+
+if (fs.existsSync(wordFilePath)) {
+  const fileWords = fs.readFileSync(wordFilePath, "utf8")
+    .split(/\r?\n/)
+    .map(w => w.trim())
+    .filter(w => /^[가-힣]{2,10}$/.test(w));
+
+  fileWords.forEach(w => dictionary.add(w));
+
+  console.log("단어장 로딩 완료!");
+  console.log(`파일 단어 수: ${fileWords.length}`);
+} else {
+  console.warn("words.txt 파일이 없습니다. 기본 단어장으로 실행합니다.");
+}
+
+console.log(`전체 단어 수: ${dictionary.size}`);
+
+// =====================================
+// 2. 기본 함수
+// =====================================
+
 function cleanWord(w) {
   return String(w || "").trim().replace(/[^가-힣]/g, "");
 }
@@ -34,7 +61,6 @@ function getRoom(code) {
   return rooms.get(code);
 }
 
-// 공개 방 정보
 function publicRoom(r) {
   return {
     code: r.code,
@@ -50,13 +76,21 @@ function publicRoom(r) {
   };
 }
 
-// 방 상태 전송
 function emitRoom(r) {
   io.to(r.code).emit("state", publicRoom(r));
 }
 
+function stopTimer(r) {
+  if (r.timer) {
+    clearInterval(r.timer);
+    r.timer = null;
+  }
+}
+
 // 다음 차례
 function nextTurn(r) {
+  if (!r.players.length) return;
+
   r.turn = (r.turn + 1) % r.players.length;
   r.seconds = 20;
 
@@ -68,9 +102,16 @@ function nextTurn(r) {
   );
 }
 
+// =====================================
+// 3. 소켓 연결
+// =====================================
+
 io.on("connection", socket => {
 
+  // ---------------------------------
   // 방 생성
+  // ---------------------------------
+
   socket.on("create", name => {
     name = String(name || "").trim().slice(0, 12) || "플레이어";
 
@@ -110,8 +151,11 @@ io.on("connection", socket => {
     emitRoom(r);
   });
 
+  // ---------------------------------
   // 방 입장
-  socket.on("join", ({ code, name }) => {
+  // ---------------------------------
+
+  socket.on("join", ({ code, name } = {}) => {
     code = String(code || "").toUpperCase().trim();
     name = String(name || "").trim().slice(0, 12) || "플레이어";
 
@@ -151,7 +195,10 @@ io.on("connection", socket => {
     io.to(code).emit("notice", `${name}님이 입장했습니다.`);
   });
 
+  // ---------------------------------
   // 게임 시작
+  // ---------------------------------
+
   socket.on("start", () => {
     const r = getRoom(socket.data.room);
 
@@ -171,6 +218,8 @@ io.on("connection", socket => {
     r.word = "";
     r.seconds = 20;
     r.used.clear();
+
+    stopTimer(r);
 
     emitRoom(r);
 
@@ -197,7 +246,10 @@ io.on("connection", socket => {
     }, 1000);
   });
 
+  // ---------------------------------
   // 단어 입력
+  // ---------------------------------
+
   socket.on("word", raw => {
     const r = getRoom(socket.data.room);
 
@@ -224,7 +276,7 @@ io.on("connection", socket => {
     if (!dictionary.has(w)) {
       return socket.emit(
         "errorMsg",
-        "예시 단어장에 없는 단어예요. 다른 단어를 입력해 보세요."
+        "단어장에 없는 단어예요. 다른 단어를 입력해 보세요."
       );
     }
 
@@ -255,7 +307,10 @@ io.on("connection", socket => {
     nextTurn(r);
   });
 
+  // ---------------------------------
   // 차례 넘기기
+  // ---------------------------------
+
   socket.on("pass", () => {
     const r = getRoom(socket.data.room);
 
@@ -276,7 +331,10 @@ io.on("connection", socket => {
     nextTurn(r);
   });
 
+  // ---------------------------------
   // 연결 종료
+  // ---------------------------------
+
   socket.on("disconnect", () => {
     const r = getRoom(socket.data.room);
 
@@ -287,8 +345,7 @@ io.on("connection", socket => {
     if (idx < 0) return;
 
     const p = r.players[idx];
-
-    p.connected = false;
+    const wasCurrentTurn = r.players[r.turn]?.id === socket.id;
 
     io.to(r.code).emit(
       "notice",
@@ -299,6 +356,7 @@ io.on("connection", socket => {
       r.players.splice(idx, 1);
 
       if (!r.players.length) {
+        stopTimer(r);
         rooms.delete(r.code);
         return;
       }
@@ -306,11 +364,21 @@ io.on("connection", socket => {
       if (r.host === socket.id) {
         r.host = r.players[0].id;
       }
-    } else if (
-      r.status === "playing" &&
-      r.players[r.turn]?.id === socket.id
-    ) {
-      nextTurn(r);
+    } else if (r.status === "playing") {
+      r.players.splice(idx, 1);
+
+      if (!r.players.length) {
+        stopTimer(r);
+        rooms.delete(r.code);
+        return;
+      }
+
+      if (idx < r.turn) {
+        r.turn--;
+      } else if (idx === r.turn) {
+        r.turn = (r.turn - 1 + r.players.length) % r.players.length;
+        nextTurn(r);
+      }
     }
 
     emitRoom(r);
@@ -318,7 +386,10 @@ io.on("connection", socket => {
 
 });
 
-// 서버 실행
+// =====================================
+// 4. 서버 실행
+// =====================================
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
