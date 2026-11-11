@@ -1,5 +1,82 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>끄투 학교 웹</title><link rel="stylesheet" href="style.css"></head>
-<body><main class="wrap"><header><div class="logo">끄투<span>WEB</span></div><p>친구들과 즐기는 실시간 끝말잇기</p></header>
-<section id="login" class="panel"><h2>게임 입장</h2><input id="name" maxlength="12" placeholder="닉네임" value="플레이어"><div class="buttons"><button id="create">방 만들기</button></div><div class="joinrow"><input id="code" maxlength="4" placeholder="방 코드 4자리"><button id="join">방 입장</button></div></section>
-<section id="game" class="panel hidden"><div class="roomline"><strong>ROOM <span id="roomcode"></span></strong><span id="status">대기 중</span></div><div class="wordbox"><small>현재 단어</small><div id="currentword">시작 단어 없음</div><div id="timer">20</div></div><div class="entry"><input id="word" maxlength="10" placeholder="단어 입력 (한글)" autocomplete="off"><button id="submit">입력</button><button id="pass" class="secondary">넘기기</button></div><p id="hint">방장이 2명 이상 모이면 시작할 수 있어요.</p><button id="start" class="start">게임 시작</button><h3>참가자</h3><ul id="players"></ul><div id="log" class="log"></div></section><div id="toast"></div><footer>학교 친구들과 함께 즐겨요 · 데모 단어장 포함</footer></main><script src="/socket.io/socket.io.js"></script><script src="app.js"></script></body></html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>끄투 학교 웹</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div class="logo">끄투<span>WEB</span></div>
+    <p>친구들과 즐기는 실시간 끝말잇기</p>
+  </header>
+
+  <section id="login" class="panel">
+    <h2>게임 입장</h2>
+    <label class="field-label" for="name">닉네임</label>
+    <input id="name" maxlength="12" placeholder="닉네임" value="플레이어">
+    <h3 class="select-title">내 캐릭터 선택</h3>
+    <div id="characterPicker" class="character-picker"></div>
+    <div class="buttons"><button id="create">방 만들기</button></div>
+    <div class="joinrow">
+      <input id="code" maxlength="4" placeholder="방 코드 4자리">
+      <button id="join">방 입장</button>
+    </div>
+  </section>
+
+  <section id="game" class="panel hidden">
+    <div class="roomline">
+      <strong>ROOM <span id="roomcode"></span></strong>
+      <span id="status">대기 중</span>
+    </div>
+
+    <div id="lobbySettings" class="lobby-settings">
+      <label class="toggle-line">
+        <input type="checkbox" id="duplicateToggle" checked>
+        <span>캐릭터 중복 선택 허용</span>
+      </label>
+      <p class="setting-help">이 설정은 방장만 변경할 수 있어요.</p>
+      <div id="lobbyCharacterPicker" class="character-picker compact"></div>
+    </div>
+
+    <div class="game-clock">
+      <span>남은 경기 시간</span>
+      <strong id="gameTimer">02:00</strong>
+    </div>
+
+    <div class="wordbox">
+      <small>현재 단어</small>
+      <div id="currentword">시작 단어 없음</div>
+      <div id="timer">20</div>
+    </div>
+
+    <div class="entry">
+      <input id="word" maxlength="10" placeholder="단어 입력 (한글)" autocomplete="off">
+      <button id="submit">입력</button>
+      <button id="pass" class="secondary">넘기기</button>
+    </div>
+    <p id="hint">방장이 2명 이상 모이면 시작할 수 있어요.</p>
+    <button id="start" class="start">게임 시작</button>
+
+    <h3>참가자</h3>
+    <ul id="players"></ul>
+    <div id="log" class="log"></div>
+  </section>
+
+  <section id="result" class="panel hidden">
+    <div class="result-crown">🏆</div>
+    <h2 id="resultTitle">게임 종료!</h2>
+    <p id="resultMessage"></p>
+    <div id="resultPlayers" class="result-players"></div>
+    <button id="backToLobby" class="start">결과 확인</button>
+  </section>
+
+  <div id="toast"></div>
+  <footer>학교 친구들과 함께 즐겨요 · 2분 점수 대결</footer>
+</main>
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
