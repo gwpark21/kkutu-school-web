@@ -1,5 +1,201 @@
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(140deg,#eaf3ff,#f6f0ff);font-family:system-ui,"Noto Sans KR",sans-serif;color:#202a44;min-height:100vh}.wrap{width:min(680px,94vw);margin:36px auto}header{text-align:center;margin-bottom:22px}.logo{font-weight:1000;font-size:42px;letter-spacing:-2px;color:#4b63e6}.logo span{font-size:15px;background:#f5a623;color:white;border-radius:8px;padding:4px 8px;margin-left:8px;letter-spacing:1px}header p{color:#6c7691;margin-top:2px}.panel{background:white;border-radius:24px;padding:24px;box-shadow:0 12px 40px #3a4a7715;border:1px solid #e8ecf8}h2{margin:0 0 18px}input{border:1px solid #d9dfef;background:#f8faff;border-radius:12px;padding:13px 14px;font-size:16px;min-width:0;outline:none}input:focus{border-color:#6577ef}.buttons{margin:12px 0}.joinrow,.entry{display:flex;gap:8px;margin-top:10px}.joinrow input,.entry input{flex:1}button{border:0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:800;color:white;background:#5869e9;cursor:pointer}button:hover{filter:brightness(1.06)}.secondary{background:#8992a9}.start{width:100%;margin:12px 0;background:#22a879}.hidden{display:none}.roomline{display:flex;justify-content:space-between;align-items:center;color:#7b849b}.roomline strong{color:#5666e6}.wordbox{position:relative;text-align:center;background:#f3f5ff;border-radius:18px;padding:22px;margin:18px 0}.wordbox small{color:#818ba5}.wordbox #currentword{font-size:32px;font-weight:900;margin-top:8px;min-height:44px;color:#29365d}.wordbox #timer{position:absolute;right:16px;top:12px;background:#fff;border-radius:50%;width:38px;height:38px;display:grid;place-items:center;color:#e15b64;font-weight:900}#hint{color:#8a91a6;font-size:13px}.entry{margin-bottom:10px}h3{margin-bottom:8px}ul{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:8px}li{background:#f2f5ff;border-radius:10px;padding:9px 12px;font-weight:700;font-size:14px}.log{max-height:170px;overflow:auto;font-size:13px;color:#707b95;border-top:1px solid #edf0f7;padding-top:10px}.log div{padding:4px 0}#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#263452;color:white;padding:12px 18px;border-radius:12px;display:none;max-width:90vw}footer{text-align:center;color:#9aa2b7;font-size:12px;margin:20px}
 
+/* =========================
+   플레이어 카드 및 점수
+========================= */
+
+.player-card {
+  background: #f3f5ff;
+  border: 2px solid transparent;
+  border-radius: 15px;
+  padding: 14px;
+  margin-bottom: 10px;
+  transition: 0.25s;
+}
+
+.player-card.current-player {
+  background: #eeebff;
+  border-color: #6577ef;
+  transform: scale(1.02);
+  box-shadow: 0 5px 16px #6577ef22;
+}
+
+.player-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-score {
+  font-size: 23px;
+  font-weight: 900;
+  margin-top: 8px;
+  color: #4b63e6;
+}
+
+.player-status {
+  font-size: 12px;
+  color: #8992a9;
+  margin-top: 5px;
+}
+
+.player-combo {
+  color: #f5a623;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+/* 점수 변화 애니메이션 */
+
+.score-up {
+  color: #22a879;
+  animation: scoreUp 0.5s ease;
+}
+
+.score-down {
+  color: #e15b64;
+  animation: scoreDown 0.5s ease;
+}
+
+@keyframes scoreUp {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+@keyframes scoreDown {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+
+/* =========================
+   점수 획득 효과
+========================= */
+
+.score-effect {
+  position: fixed;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  font-size: 38px;
+  font-weight: 1000;
+}
+
+.score-effect.gain {
+  color: #22a879;
+}
+
+.score-effect.active {
+  animation: scorePopup 1.2s ease forwards;
+}
+
+@keyframes scorePopup {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.2);
+  }
+  75% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50px) scale(1);
+  }
+}
+
+/* =========================
+   콤보 효과
+========================= */
+
+.combo-effect {
+  position: fixed;
+  top: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  font-size: 30px;
+  font-weight: 1000;
+  color: #f5a623;
+  text-shadow: 0 3px 10px #ffcf75;
+  white-space: nowrap;
+}
+
+.combo-effect.active {
+  animation: comboPopup 1.5s ease forwards;
+}
+
+@keyframes comboPopup {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.5);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -45px) scale(1);
+  }
+}
+
+/* =========================
+   단어 기록
+========================= */
+
+.word-log-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border-bottom: 1px solid #edf0f7;
+  animation: logAppear 0.3s ease;
+}
+
+.log-score {
+  color: #22a879;
+  font-weight: 900;
+}
+
+.log-combo {
+  color: #f5a623;
+  font-weight: 900;
+}
+
+@keyframes logAppear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 모바일 화면 */
+@media (max-width: 480px) {
+  .score-effect {
+    font-size: 30px;
+  }
+
+  .combo-effect {
+    font-size: 23px;
+  }
+
+  .player-score {
+    font-size: 20px;
+  }
+}
+
 /* 토스트 메시지 */
 #toast.show {
   display: block;
