@@ -1,28 +1,60 @@
+
 <!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>끄투 학교 웹</title>
+  <title>원곡고 단어짱</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main class="wrap">
-  <header>
-    <div class="logo">끄투<span>WEB</span></div>
-    <p>친구들과 즐기는 실시간 끝말잇기</p>
+
+  <header class="hero-header">
+    <div class="school-badge">WONGOK HIGH SCHOOL</div>
+
+    <div class="hero-title">
+      <span class="hero-icon">🔤</span>
+      <h1>원곡고 <span>단어짱</span></h1>
+    </div>
+
+    <p class="hero-subtitle">단어로 펼치는 짜릿한 한판 승부!</p>
+
+    <div class="hero-tags">
+      <span>⚡ 실시간 멀티플레이</span>
+      <span>🏆 2분 점수 대결</span>
+      <span>🎮 친구와 함께</span>
+    </div>
+
+    <div class="hero-decoration decoration-one">가</div>
+    <div class="hero-decoration decoration-two">나</div>
+    <div class="hero-decoration decoration-three">다</div>
   </header>
 
-  <section id="login" class="panel">
-    <h2>게임 입장</h2>
+  <section id="login" class="panel login-panel">
+    <div class="login-heading">
+      <span class="login-icon">🎮</span>
+      <div>
+        <h2>게임 입장</h2>
+        <p>나만의 캐릭터를 고르고 대결을 시작해 보세요!</p>
+      </div>
+    </div>
+
     <label class="field-label" for="name">닉네임</label>
-    <input id="name" maxlength="12" placeholder="닉네임" value="플레이어">
-    <h3 class="select-title">내 캐릭터 선택</h3>
+    <input id="name" maxlength="12" placeholder="닉네임을 입력하세요" value="플레이어">
+
+    <h3 class="select-title">✨ 내 캐릭터 선택</h3>
     <div id="characterPicker" class="character-picker"></div>
-    <div class="buttons"><button id="create">방 만들기</button></div>
+
+    <div class="buttons">
+      <button id="create" class="create-button">🏠 방 만들기</button>
+    </div>
+
+    <div class="join-divider"><span>또는</span></div>
+
     <div class="joinrow">
       <input id="code" maxlength="4" placeholder="방 코드 4자리">
-      <button id="join">방 입장</button>
+      <button id="join" class="join-button">방 입장</button>
     </div>
   </section>
 
@@ -57,6 +89,7 @@
       <button id="submit">입력</button>
       <button id="pass" class="secondary">넘기기</button>
     </div>
+
     <p id="hint">방장이 2명 이상 모이면 시작할 수 있어요.</p>
     <button id="start" class="start">게임 시작</button>
 
@@ -74,8 +107,14 @@
   </section>
 
   <div id="toast"></div>
-  <footer>학교 친구들과 함께 즐겨요 · 2분 점수 대결</footer>
+
+  <footer>
+    <strong>원곡고 단어짱</strong>
+    <span> · 친구들과 함께 즐기는 단어 대결</span>
+  </footer>
+
 </main>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="app.js"></script>
 </body>
