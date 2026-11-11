@@ -6,416 +6,330 @@ const $ = id => document.getElementById(id);
 let myRoom = "";
 let isHost = false;
 
-// 이전 상태 저장
-let previousScores = new Map();
-let previousTurn = null;
-let previousStatus = null;
-let previousSeconds = null;
+let previousScores = {};
+let previousCombos = {};
 
-// 현재 차례의 최대 제한 시간
-let timerMax = 20;
+function toast(message) {
+  const el = $("toast");
 
-// =====================================
-// 1. 디자인 효과 CSS 자동 추가
-// =====================================
-
-const style = document.createElement("style");
-
-style.textContent = `
-  /* 타이머 */
-  #timer {
-    font-weight: bold;
-    transition: color 0.3s, transform 0.3s;
-  }
-
-  #timer.warning {
-    color: #ff4040 !important;
-    animation: timerWarning 0.55s infinite alternate;
-  }
-
-  @keyframes timerWarning {
-    from {
-      transform: scale(1);
-      text-shadow: 0 0 3px #ff4040;
-    }
-    to {
-      transform: scale(1.15);
-      text-shadow: 0 0 14px #ff2020;
-    }
-  }
-
-  /* 시간 게이지 */
-  #timerBar {
-    width: 100%;
-    height: 9px;
-    background: rgba(130,130,130,0.2);
-    border-radius: 20px;
-    overflow: hidden;
-    margin-top: 8px;
-  }
-
-  #timerBarFill {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, #22c55e, #3b82f6);
-    border-radius: 20px;
-    transition: width 0.9s linear, background 0.3s;
-  }
-
-  #timerBarFill.warning {
-    background: linear-gradient(90deg, #ff3030, #ff7777);
-  }
-
-  /* 플레이어 목록 */
-  #players li {
-    transition: background 0.3s, transform 0.3s;
-    position: relative;
-  }
-
-  #players li.active-player {
-    background: rgba(100, 100, 255, 0.12);
-    border-radius: 8px;
-    font-weight: bold;
-  }
-
-  /* 점수 감소 */
-  .score-down {
-    display: inline-block;
-    color: #ff4545;
-    font-weight: bold;
-    animation: scoreDown 0.7s ease;
-  }
-
-  /* 점수 증가 */
-  .score-up {
-    display: inline-block;
-    color: #22c55e;
-    font-weight: bold;
-    animation: scoreUp 0.7s ease;
-  }
-
-  @keyframes scoreDown {
-    0% {
-      opacity: 0;
-      transform: translateY(-8px);
-    }
-    40% {
-      opacity: 1;
-      transform: translateY(4px);
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(-12px);
-    }
-  }
-
-  @keyframes scoreUp {
-    0% {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    40% {
-      opacity: 1;
-      transform: translateY(-4px);
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(-14px);
-    }
-  }
-
-  /* 단어 성공 기록 */
-  .word-log-item {
-    animation: logAppear 0.35s ease;
-  }
-
-  @keyframes logAppear {
-    from {
-      opacity: 0;
-      transform: translateX(-12px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-`;
-
-document.head.appendChild(style);
-
-// 타이머 게이지 생성
-const timerElement = $("timer");
-
-if (timerElement && ! $("timerBar")) {
-  const timerBar = document.createElement("div");
-
-  timerBar.id = "timerBar";
-
-  timerBar.innerHTML = `
-    <div id="timerBarFill"></div>
-  `;
-
-  timerElement.insertAdjacentElement("afterend", timerBar);
-}
-
-// =====================================
-// 2. 알림 메시지
-// =====================================
-
-function toast(msg) {
-  $("toast").textContent = msg;
-  $("toast").style.display = "block";
-
-  setTimeout(() => {
-    $("toast").style.display = "none";
-  }, 2800);
-}
-
-// =====================================
-// 3. 플레이어 이름
-// =====================================
-
-function name() {
-  return $("name").value.trim() || "플레이어";
-}
-
-// =====================================
-// 4. 방 생성
-// =====================================
-
-$("create").onclick = () => {
-  socket.emit("create", name());
-};
-
-// =====================================
-// 5. 방 입장
-// =====================================
-
-$("join").onclick = () => {
-  socket.emit("join", {
-    code: $("code").value.trim(),
-    name: name()
-  });
-};
-
-// =====================================
-// 6. 게임 시작
-// =====================================
-
-$("start").onclick = () => {
-  socket.emit("start");
-};
-
-// =====================================
-// 7. 단어 입력
-// =====================================
-
-$("submit").onclick = submitWord;
-
-$("word").addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    submitWord();
-  }
-});
-
-function submitWord() {
-  if ($("word").value.trim()) {
-    socket.emit("word", $("word").value);
-    $("word").value = "";
-  }
-}
-
-// =====================================
-// 8. 차례 넘기기
-// =====================================
-
-$("pass").onclick = () => {
-  socket.emit("pass");
-};
-
-// =====================================
-// 9. 방 생성 완료
-// =====================================
-
-socket.on("created", code => {
-  myRoom = code;
-  isHost = true;
-
-  $("login").classList.add("hidden");
-  $("game").classList.remove("hidden");
-
-  $("roomcode").textContent = code;
-  $("start").style.display = "block";
-});
-
-// =====================================
-// 10. 타이머 화면 갱신
-// =====================================
-
-function updateTimer(seconds, status) {
-  const timer = $("timer");
-  const fill = $("timerBarFill");
-
-  if (!timer || !fill) return;
-
-  timer.textContent = `${seconds}초`;
-
-  if (status !== "playing") {
-    timer.classList.remove("warning");
-    fill.classList.remove("warning");
-    fill.style.width = "100%";
+  if (!el) {
+    alert(message);
     return;
   }
 
-  const percent = Math.max(
-    0,
-    Math.min(100, (seconds / timerMax) * 100)
-  );
+  el.textContent = message;
+  el.classList.add("show");
 
-  fill.style.width = `${percent}%`;
-
-  // 마지막 5초 경고
-  if (seconds <= 5) {
-    timer.classList.add("warning");
-    fill.classList.add("warning");
-  } else {
-    timer.classList.remove("warning");
-    fill.classList.remove("warning");
-  }
+  setTimeout(() => {
+    el.classList.remove("show");
+  }, 2500);
 }
 
-// =====================================
-// 11. 플레이어 점수 애니메이션
-// =====================================
+// ==============================
+// 점수 및 콤보 효과
+// ==============================
 
-function getScoreEffect(name, score) {
-  const previous = previousScores.get(name);
+function showScoreEffect(message, type = "gain") {
+  let effect = $("scoreEffect");
 
-  if (previous === undefined || previous === score) {
-    return "";
+  if (!effect) {
+    effect = document.createElement("div");
+    effect.id = "scoreEffect";
+    document.body.appendChild(effect);
   }
 
-  const difference = score - previous;
+  effect.textContent = message;
+  effect.className = `score-effect ${type}`;
 
-  if (difference < 0) {
-    return `<span class="score-down">-${Math.abs(difference)}</span>`;
-  }
+  // 애니메이션 재시작
+  void effect.offsetWidth;
 
-  return `<span class="score-up">+${difference}</span>`;
+  effect.classList.add("active");
+
+  setTimeout(() => {
+    effect.classList.remove("active");
+  }, 1200);
 }
 
-// =====================================
-// 12. 방 상태 업데이트
-// =====================================
+function showComboEffect(combo, multiplier) {
+  if (combo < 2) return;
 
-socket.on("state", r => {
-  myRoom = r.code;
+  let effect = $("comboEffect");
 
-  // 입장자도 게임 화면으로 전환
-  $("login").classList.add("hidden");
-  $("game").classList.remove("hidden");
-
-  $("roomcode").textContent = r.code;
-
-  $("status").textContent =
-    r.status === "waiting"
-      ? "대기 중"
-      : "게임 진행 중";
-
-  $("currentword").textContent =
-    r.word || "시작 단어 없음";
-
-  // 차례가 바뀌거나 게임이 시작되면
-  // 새로운 턴의 최대 시간을 설정
-  const newTurn =
-    previousTurn !== r.turn ||
-    previousStatus !== r.status ||
-    (previousSeconds !== null && r.seconds > previousSeconds);
-
-  if (r.status === "playing" && newTurn) {
-    timerMax = r.seconds;
+  if (!effect) {
+    effect = document.createElement("div");
+    effect.id = "comboEffect";
+    document.body.appendChild(effect);
   }
 
-  // 타이머 갱신
-  updateTimer(r.seconds, r.status);
+  effect.textContent = `🔥 COMBO ${combo}  ×${multiplier}`;
 
-  // 플레이어 목록 갱신
-  $("players").innerHTML = r.players.map((p, i) => {
+  void effect.offsetWidth;
 
-    const isActive =
-      i === r.turn && r.status === "playing";
+  effect.className = "combo-effect active";
 
-    const effect = getScoreEffect(p.name, p.score);
+  setTimeout(() => {
+    effect.classList.remove("active");
+  }, 1500);
+}
 
-    return `
-      <li class="${isActive ? "active-player" : ""}">
-        ${isActive ? "▶ " : ""}
-        ${escapeHtml(p.name)}
-        · ${p.score}점
-        ${effect}
-        ${p.connected ? "" : " (연결 끊김)"}
-      </li>
-    `;
+// ==============================
+// 화면 초기화
+// ==============================
 
-  }).join("");
+function enterGame() {
+  $("login")?.classList.add("hidden");
+  $("game")?.classList.remove("hidden");
+}
 
-  // 최신 점수 저장
-  previousScores.clear();
+// ==============================
+// 방 생성
+// ==============================
 
-  r.players.forEach(p => {
-    previousScores.set(p.name, p.score);
+function createRoom() {
+  const name = $("name").value.trim();
+
+  if (!name) {
+    toast("닉네임을 입력해 주세요.");
+    return;
+  }
+
+  socket.emit("create", { name });
+}
+
+// ==============================
+// 방 참가
+// ==============================
+
+function joinRoom() {
+  const name = $("name").value.trim();
+  const code = $("roomCode").value.trim();
+
+  if (!name || !code) {
+    toast("닉네임과 방 코드를 입력해 주세요.");
+    return;
+  }
+
+  socket.emit("join", { name, code });
+}
+
+// ==============================
+// 게임 시작
+// ==============================
+
+function startGame() {
+  socket.emit("start");
+}
+
+// ==============================
+// 단어 입력
+// ==============================
+
+function submitWord() {
+  const input = $("wordInput");
+
+  if (!input) return;
+
+  const word = input.value.trim();
+
+  if (!word) return;
+
+  socket.emit("word", { word });
+
+  input.value = "";
+  input.focus();
+}
+
+// ==============================
+// 패스
+// ==============================
+
+function passTurn() {
+  socket.emit("pass");
+}
+
+// ==============================
+// 방 생성 완료
+// ==============================
+
+socket.on("created", room => {
+  myRoom = room.code;
+  isHost = true;
+
+  enterGame();
+
+  toast(`방이 생성되었습니다! 코드: ${room.code}`);
+});
+
+// ==============================
+// 게임 상태 업데이트
+// ==============================
+
+socket.on("state", room => {
+  myRoom = room.code;
+
+  enterGame();
+
+  // 방 코드
+  if ($("roomCodeDisplay")) {
+    $("roomCodeDisplay").textContent = room.code;
+  }
+
+  // 현재 단어
+  if ($("currentWord")) {
+    $("currentWord").textContent = room.word || "첫 단어를 입력하세요!";
+  }
+
+  // 남은 시간
+  if ($("timer")) {
+    $("timer").textContent = room.seconds;
+  }
+
+  // 플레이어 목록
+  if ($("players")) {
+    $("players").innerHTML = "";
+
+    room.players.forEach((player, index) => {
+      const item = document.createElement("div");
+
+      item.className = "player-card";
+
+      if (index === room.turn && room.status === "playing") {
+        item.classList.add("current-player");
+      }
+
+      const oldScore = previousScores[player.id];
+      let scoreEffect = "";
+
+      if (oldScore !== undefined && player.score > oldScore) {
+        scoreEffect = "score-up";
+      } else if (oldScore !== undefined && player.score < oldScore) {
+        scoreEffect = "score-down";
+      }
+
+      item.innerHTML = `
+        <div class="player-info">
+          <strong>${escapeHtml(player.name)}</strong>
+          <span class="player-combo">
+            ${player.combo > 1 ? `🔥 ${player.combo} COMBO` : ""}
+          </span>
+        </div>
+
+        <div class="player-score ${scoreEffect}">
+          ${player.score.toLocaleString()}점
+        </div>
+
+        <div class="player-status">
+          ${index === room.turn && room.status === "playing"
+            ? "🎯 현재 차례"
+            : player.connected ? "접속 중" : "접속 종료"}
+        </div>
+      `;
+
+      $("players").appendChild(item);
+    });
+  }
+
+  // 이전 점수 저장
+  previousScores = {};
+
+  room.players.forEach(player => {
+    previousScores[player.id] = player.score;
   });
 
-  // 방장만 게임 시작 버튼 표시
-  $("start").style.display =
-    isHost && r.status === "waiting"
-      ? "block"
-      : "none";
+  // 게임 시작 버튼
+  if ($("startButton")) {
+    $("startButton").classList.toggle(
+      "hidden",
+      !isHost || room.status !== "waiting"
+    );
+  }
 
-  $("hint").textContent =
-    r.status === "waiting"
-      ? "방 코드 공유 후 2명 이상 모이면 시작하세요."
-      : "현재 차례인 플레이어가 단어를 입력합니다.";
+  // 단어 입력 및 패스 버튼
+  const myTurn = room.players[room.turn]?.id === socket.id;
 
-  // 이전 상태 저장
-  previousTurn = r.turn;
-  previousStatus = r.status;
-  previousSeconds = r.seconds;
+  if ($("wordInput")) {
+    $("wordInput").disabled = room.status !== "playing" || !myTurn;
+  }
+
+  if ($("submitButton")) {
+    $("submitButton").disabled = room.status !== "playing" || !myTurn;
+  }
+
+  if ($("passButton")) {
+    $("passButton").disabled = room.status !== "playing" || !myTurn;
+  }
+
+  // 안내 문구
+  if ($("hint")) {
+    if (room.status === "waiting") {
+      $("hint").textContent = "친구들이 입장하면 게임을 시작하세요!";
+    } else if (myTurn) {
+      $("hint").textContent = "지금은 당신의 차례입니다!";
+    } else {
+      $("hint").textContent =
+        `${room.players[room.turn]?.name || "상대"}의 차례입니다.`;
+    }
+  }
 });
 
-// =====================================
-// 13. 단어 기록
-// =====================================
+// ==============================
+// 단어 성공 이벤트
+// ==============================
 
-socket.on("wordPlayed", d => {
-  const div = document.createElement("div");
+socket.on("wordPlayed", data => {
+  const log = $("wordLog");
 
-  div.className = "word-log-item";
+  if (log) {
+    const item = document.createElement("div");
 
-  div.textContent =
-    `${d.name}: ${d.word} (+10점)`;
+    item.className = "word-log-item";
 
-  $("log").prepend(div);
+    item.innerHTML = `
+      <strong>${escapeHtml(data.name)}</strong>
+      <span>${escapeHtml(data.word)}</span>
+      <span class="log-score">+${data.score}점</span>
+      ${data.multiplier > 1
+        ? `<span class="log-combo">×${data.multiplier}</span>`
+        : ""}
+    `;
+
+    log.prepend(item);
+  }
+
+  // 내 점수 획득 효과
+  if (data.name && data.score && data.name === $("name")?.value.trim()) {
+    showScoreEffect(`+${data.score}점`, "gain");
+  }
+
+  // 콤보 효과
+  if (data.combo >= 2 && data.name === $("name")?.value.trim()) {
+    showComboEffect(data.combo, data.multiplier);
+  }
 });
 
-// =====================================
-// 14. 알림 및 오류
-// =====================================
+// ==============================
+// 알림
+// ==============================
 
-socket.on("notice", toast);
+socket.on("notice", message => {
+  toast(message);
+});
 
-socket.on("errorMsg", toast);
+socket.on("errorMsg", message => {
+  toast(message);
+});
 
-// =====================================
-// 15. HTML 특수문자 처리
-// =====================================
+// ==============================
+// HTML 보안 처리
+// ==============================
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
-    "'": "&#39;"
-  }[c]));
+    "'": "&#039;"
+  })[char]);
 }
