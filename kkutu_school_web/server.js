@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, "public")));
 const rooms = new Map();
 
 // =====================================
-// 1. 단어장 설정
+// 1. 단어장
 // =====================================
 
 const dictionary = new Set(
@@ -61,25 +61,15 @@ function getRoom(code) {
   return rooms.get(code);
 }
 
-function publicRoom(r) {
-  return {
-    code: r.code,
-    players: r.players.map(p => ({
-      name: p.name,
-      score: p.score,
-      connected: p.connected
-    })),
-    status: r.status,
-    turn: r.turn,
-    word: r.word,
-    seconds: r.seconds
-  };
+// 단어 성공 횟수에 따른 제한 시간
+function getTurnTime(r) {
+  return Math.max(
+    7,
+    20 - Math.floor(r.chainCount / 3) * 2
+  );
 }
 
-function emitRoom(r) {
-  io.to(r.code).emit("state", publicRoom(r));
-}
-
+// 타이머 정지
 function stopTimer(r) {
   if (r.timer) {
     clearInterval(r.timer);
@@ -87,12 +77,37 @@ function stopTimer(r) {
   }
 }
 
+// 공개 방 정보
+function publicRoom(r) {
+  return {
+    code: r.code,
+
+    players: r.players.map(p => ({
+      name: p.name,
+      score: p.score,
+      connected: p.connected
+    })),
+
+    status: r.status,
+    turn: r.turn,
+    word: r.word,
+    seconds: r.seconds
+  };
+}
+
+// 방 상태 전송
+function emitRoom(r) {
+  io.to(r.code).emit("state", publicRoom(r));
+}
+
 // 다음 차례
 function nextTurn(r) {
   if (!r.players.length) return;
 
   r.turn = (r.turn + 1) % r.players.length;
-  r.seconds = 20;
+
+  // 성공한 단어 수에 따라 시간 감소
+  r.seconds = getTurnTime(r);
 
   emitRoom(r);
 
@@ -131,10 +146,15 @@ io.on("connection", socket => {
     const r = {
       code,
       players: [p],
+
       status: "waiting",
       turn: 0,
       word: "",
       seconds: 20,
+
+      // 성공한 단어 수
+      chainCount: 0,
+
       host: socket.id,
       timer: null,
       used: new Set()
@@ -162,15 +182,24 @@ io.on("connection", socket => {
     const r = getRoom(code);
 
     if (!r) {
-      return socket.emit("errorMsg", "방 코드가 올바르지 않습니다.");
+      return socket.emit(
+        "errorMsg",
+        "방 코드가 올바르지 않습니다."
+      );
     }
 
     if (r.status !== "waiting") {
-      return socket.emit("errorMsg", "이미 게임이 시작된 방입니다.");
+      return socket.emit(
+        "errorMsg",
+        "이미 게임이 시작된 방입니다."
+      );
     }
 
     if (r.players.length >= 8) {
-      return socket.emit("errorMsg", "방 인원이 가득 찼습니다. (최대 8명)");
+      return socket.emit(
+        "errorMsg",
+        "방 인원이 가득 찼습니다. (최대 8명)"
+      );
     }
 
     if (r.players.some(p => p.name === name)) {
@@ -192,7 +221,10 @@ io.on("connection", socket => {
 
     emitRoom(r);
 
-    io.to(code).emit("notice", `${name}님이 입장했습니다.`);
+    io.to(code).emit(
+      "notice",
+      `${name}님이 입장했습니다.`
+    );
   });
 
   // ---------------------------------
@@ -214,9 +246,13 @@ io.on("connection", socket => {
     if (r.status !== "waiting") return;
 
     r.status = "playing";
+
     r.turn = 0;
     r.word = "";
+
+    r.chainCount = 0;
     r.seconds = 20;
+
     r.used.clear();
 
     stopTimer(r);
@@ -228,21 +264,38 @@ io.on("connection", socket => {
       "게임 시작! 20초 안에 단어를 입력하세요."
     );
 
+    // 1초마다 점수와 시간 갱신
     r.timer = setInterval(() => {
+
       if (r.status !== "playing") return;
 
+      const currentPlayer = r.players[r.turn];
+
+      if (!currentPlayer) return;
+
+      // 제한 시간 감소
       r.seconds--;
 
+      // 현재 플레이어 점수 감소
+      currentPlayer.score = Math.max(
+        0,
+        currentPlayer.score - 1
+      );
+
+      // 시간 초과
       if (r.seconds <= 0) {
+
         io.to(r.code).emit(
           "notice",
-          `${r.players[r.turn].name}님 시간 초과!`
+          `${currentPlayer.name}님 시간 초과!`
         );
 
         nextTurn(r);
+
       } else {
         emitRoom(r);
       }
+
     }, 1000);
   });
 
@@ -257,6 +310,7 @@ io.on("connection", socket => {
 
     const p = r.players[r.turn];
 
+    // 현재 차례 확인
     if (!p || p.id !== socket.id) {
       return socket.emit(
         "errorMsg",
@@ -266,6 +320,7 @@ io.on("connection", socket => {
 
     const w = cleanWord(raw);
 
+    // 글자 수 검사
     if (w.length < 2 || w.length > 10) {
       return socket.emit(
         "errorMsg",
@@ -273,6 +328,7 @@ io.on("connection", socket => {
       );
     }
 
+    // 단어장 검사
     if (!dictionary.has(w)) {
       return socket.emit(
         "errorMsg",
@@ -280,6 +336,7 @@ io.on("connection", socket => {
       );
     }
 
+    // 끝말잇기 규칙 검사
     if (r.word && w[0] !== r.word[r.word.length - 1]) {
       return socket.emit(
         "errorMsg",
@@ -287,6 +344,7 @@ io.on("connection", socket => {
       );
     }
 
+    // 중복 단어 검사
     if (r.used.has(w)) {
       return socket.emit(
         "errorMsg",
@@ -294,16 +352,24 @@ io.on("connection", socket => {
       );
     }
 
+    // 단어 등록
     r.used.add(w);
     r.word = w;
+
+    // 점수 획득
     p.score += 10;
 
+    // 성공한 단어 수 증가
+    r.chainCount++;
+
+    // 단어 성공 알림
     io.to(r.code).emit("wordPlayed", {
       name: p.name,
       word: w,
       score: p.score
     });
 
+    // 다음 플레이어 차례
     nextTurn(r);
   });
 
@@ -340,19 +406,23 @@ io.on("connection", socket => {
 
     if (!r) return;
 
-    const idx = r.players.findIndex(p => p.id === socket.id);
+    const idx = r.players.findIndex(
+      p => p.id === socket.id
+    );
 
     if (idx < 0) return;
 
     const p = r.players[idx];
-    const wasCurrentTurn = r.players[r.turn]?.id === socket.id;
+    const wasCurrentTurn = r.turn === idx;
 
     io.to(r.code).emit(
       "notice",
       `${p.name}님 연결이 끊겼습니다.`
     );
 
+    // 대기 중 연결 종료
     if (r.status === "waiting") {
+
       r.players.splice(idx, 1);
 
       if (!r.players.length) {
@@ -364,7 +434,14 @@ io.on("connection", socket => {
       if (r.host === socket.id) {
         r.host = r.players[0].id;
       }
-    } else if (r.status === "playing") {
+
+      emitRoom(r);
+      return;
+    }
+
+    // 게임 중 연결 종료
+    if (r.status === "playing") {
+
       r.players.splice(idx, 1);
 
       if (!r.players.length) {
@@ -373,15 +450,28 @@ io.on("connection", socket => {
         return;
       }
 
-      if (idx < r.turn) {
-        r.turn--;
-      } else if (idx === r.turn) {
-        r.turn = (r.turn - 1 + r.players.length) % r.players.length;
-        nextTurn(r);
+      if (wasCurrentTurn) {
+        // 현재 차례 플레이어가 나간 경우
+        r.turn = idx % r.players.length;
+        r.seconds = getTurnTime(r);
+
+        emitRoom(r);
+
+        io.to(r.code).emit(
+          "notice",
+          `${r.players[r.turn].name}님의 차례입니다.`
+        );
+
+      } else {
+        // 현재 차례보다 앞선 플레이어가 나간 경우
+        if (idx < r.turn) {
+          r.turn--;
+        }
+
+        emitRoom(r);
       }
     }
 
-    emitRoom(r);
   });
 
 });
