@@ -439,14 +439,15 @@ io.on("connection", socket => {
     // 연속 성공 단어 수 증가
     room.chainCount++;
 
-    io.to(room.code).emit("wordPlayed", {
-      name: player.name,
-      word,
-      score: result.earnedScore,
-      totalScore: player.score,
-      combo: player.combo,
-      multiplier: result.multiplier
-    });
+ io.to(room.code).emit("wordPlayed", {
+  playerId: player.id,
+  name: player.name,
+  word,
+  earnedScore: result.earnedScore,
+  totalScore: player.score,
+  combo: player.combo,
+  multiplier: result.multiplier
+});
 
     // 다음 플레이어
     nextTurn(room);
