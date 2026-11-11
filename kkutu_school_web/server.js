@@ -14,474 +14,519 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
 
-// =====================================
+// ==============================
 // 1. 단어장
-// =====================================
+// ==============================
 
-const dictionary = new Set(
-  (
-    "사과 과자 자동차 차표 표범 범인 인형 형사 사자 자전거 거미 미술 술잔 잔디 디지털 털실 실내 내일 일기 기차 차례 예술 술집 집게 게살 살구 구름"
-  ).split(" ")
-);
+const starterWords = `
+사과 과자 자동차 차표 표범 범인 인형 형광등 등산 산책 책상 상자
+자전거 거울 울음 음식 식당 당근 근육 회사 사자 자석 석탄
+탄산 산소 소금 금요일 일요일 학교 교실 실내 내일 일기 기차
+차량 양말 말벌 벌집 집게 게임 임금 금고 고래 래퍼 퍼즐
+바다 다리 리본 본능 능력 역사 사전 전기 기름 사람 마음 음악
+악기 기린 스타 타조 조개 개미 미술 술잔 잔디 디지털 털실
+실력 역전 전쟁 쟁반 반지 지도 도서관 관찰 찰흙 흙탕물 물고기
+기상 상어 어항 항구 구름 식물 물병 병원 원숭이 이불 불꽃 꽃병
+병아리 리듬 악수 수박 박수 수업 업적 적금 금액 액자 차례 예절
+절약 약속 속도 도시 시계 계단 단어 어른 은행 행운 운동 동물
+물감 감자 자판기 기계 계산 산수 수학 학습 습관
+`.trim().split(/\s+/);
 
-const starterWords = (
-  "학교 교실 학생 선생님 컴퓨터 인터넷 게임 끄투 온라인 친구 가족 사랑 마음 바다 하늘 구름 나무 꽃 사과 바나나 포도 수박 딸기 과일 음식 라면 떡볶이 김밥 치킨 피자 햄버거 우유 물고기 고양이 강아지 토끼 사자 호랑이 코끼리 기린 원숭이 다람쥐 자동차 자전거 비행기 기차 버스 지하철 택시 도로 신호등 건물 아파트 집 방 책상 의자 책 공책 연필 지우개 가방 시계 전화기 카메라 사진 음악 노래 영화 드라마 만화 운동 축구 농구 야구 배구 수영 달리기 체육 과학 수학 국어 영어 역사 지리 우주 행성 별 달 태양 지구 화성 은하 로봇 인공지능 데이터 알고리즘 코드 프로그램 개발자 컴퓨터공학 전기 전자 반도체 에너지 환경 기후 날씨 비 눈 바람 태풍 번개 무지개 겨울 여름 봄 가을 꽃밭 숲 나뭇잎 열매 씨앗 바위 강 호수 바다섬 해변 모래 조개 고래 상어 문어 오징어 새우 게 거북이 펭귄 독수리 참새 비둘기 나비 벌 개미 잠자리 매미 풀 대나무 소나무 장미 튤립 해바라기 국화 백합 민들레"
-).split(" ");
+const dictionary = new Set(starterWords);
 
-starterWords.forEach(w => dictionary.add(w));
+// words.txt 불러오기
+const wordFile = path.join(__dirname, "words.txt");
 
-// 외부 단어장 불러오기
-const wordFilePath = path.join(__dirname, "words.txt");
-
-if (fs.existsSync(wordFilePath)) {
-  const fileWords = fs.readFileSync(wordFilePath, "utf8")
+if (fs.existsSync(wordFile)) {
+  const extraWords = fs.readFileSync(wordFile, "utf8")
     .split(/\r?\n/)
-    .map(w => w.trim())
-    .filter(w => /^[가-힣]{2,10}$/.test(w));
+    .map(word => word.trim())
+    .filter(word => /^[가-힣]{2,10}$/.test(word));
 
-  fileWords.forEach(w => dictionary.add(w));
+  extraWords.forEach(word => dictionary.add(word));
 
-  console.log("단어장 로딩 완료!");
-  console.log(`파일 단어 수: ${fileWords.length}`);
+  console.log(`추가 단어 ${extraWords.length}개 불러오기 완료`);
 } else {
-  console.warn("words.txt 파일이 없습니다. 기본 단어장으로 실행합니다.");
+  console.log("words.txt 파일이 없습니다. 기본 단어장으로 실행합니다.");
 }
 
-console.log(`전체 단어 수: ${dictionary.size}`);
+console.log(`전체 단어 수: ${dictionary.size}개`);
 
-// =====================================
+// ==============================
 // 2. 기본 함수
-// =====================================
+// ==============================
 
-function cleanWord(w) {
-  return String(w || "").trim().replace(/[^가-힣]/g, "");
+function cleanWord(word) {
+  return String(word || "").trim().replace(/\s/g, "");
+}
+
+function makeRoomCode() {
+  let code;
+
+  do {
+    code = crypto.randomBytes(2).toString("hex").toUpperCase();
+  } while (rooms.has(code));
+
+  return code;
 }
 
 function getRoom(code) {
-  return rooms.get(code);
+  return rooms.get(String(code || "").toUpperCase());
 }
 
-// 단어 성공 횟수에 따른 제한 시간
-function getTurnTime(r) {
+// 제한 시간 계산
+function getTurnTime(room) {
   return Math.max(
     7,
-    20 - Math.floor(r.chainCount / 3) * 2
+    20 - Math.floor(room.chainCount / 3) * 2
   );
 }
 
-// 타이머 정지
-function stopTimer(r) {
-  if (r.timer) {
-    clearInterval(r.timer);
-    r.timer = null;
+// ==============================
+// 3. 두음법칙
+// ==============================
+
+const dueumGroups = [
+  ["라", "나"],
+  ["래", "내"],
+  ["로", "노"],
+  ["뢰", "뇌"],
+  ["루", "누"],
+  ["르", "느"],
+
+  ["랴", "야"],
+  ["려", "여"],
+  ["례", "예"],
+  ["료", "요"],
+  ["류", "유"],
+  ["리", "이"],
+
+  ["냐", "야"],
+  ["녀", "여"],
+  ["뇨", "요"],
+  ["뉴", "유"],
+  ["니", "이"],
+
+  ["력", "역"],
+  ["련", "연"],
+  ["렬", "열"]
+];
+
+function getAllowedFirstChars(lastChar) {
+  const allowed = new Set([lastChar]);
+
+  for (const group of dueumGroups) {
+    if (group.includes(lastChar)) {
+      group.forEach(char => allowed.add(char));
+    }
   }
+
+  return allowed;
 }
 
-// 공개 방 정보
-function publicRoom(r) {
-  return {
-    code: r.code,
+// ==============================
+// 4. 방 정보
+// ==============================
 
-    players: r.players.map(p => ({
-      name: p.name,
-      score: p.score,
-      connected: p.connected
+function publicRoom(room) {
+  return {
+    code: room.code,
+
+    players: room.players.map(player => ({
+      id: player.id,
+      name: player.name,
+      score: player.score,
+      combo: player.combo,
+      connected: player.connected
     })),
 
-    status: r.status,
-    turn: r.turn,
-    word: r.word,
-    seconds: r.seconds
+    status: room.status,
+    turn: room.turn,
+    word: room.word,
+    seconds: room.seconds,
+    chainCount: room.chainCount
   };
 }
 
-// 방 상태 전송
-function emitRoom(r) {
-  io.to(r.code).emit("state", publicRoom(r));
+function sendState(room) {
+  io.to(room.code).emit("state", publicRoom(room));
 }
 
-// 다음 차례
-function nextTurn(r) {
-  if (!r.players.length) return;
+// ==============================
+// 5. 점수 및 콤보
+// ==============================
 
-  r.turn = (r.turn + 1) % r.players.length;
+// 실패하면 현재 점수의 20% 감점
+function failTurn(room) {
+  const player = room.players[room.turn];
 
-  // 성공한 단어 수에 따라 시간 감소
-  r.seconds = getTurnTime(r);
+  if (!player) return;
 
-  emitRoom(r);
+  const penalty = Math.ceil(player.score * 0.2);
 
-  io.to(r.code).emit(
-    "notice",
-    `${r.players[r.turn].name}님의 차례입니다.`
-  );
+  player.score = Math.max(0, player.score - penalty);
+
+  // 콤보 초기화
+  player.combo = 0;
 }
 
-// =====================================
-// 3. 소켓 연결
-// =====================================
+// 성공하면 단어 길이와 콤보에 따라 점수 획득
+function rewardPlayer(player, word) {
+  player.combo++;
+
+  // 최대 5배
+  const multiplier = Math.min(player.combo, 5);
+
+  // 2글자 10점, 한 글자 길어질 때마다 5점 추가
+  const baseScore = 10 + (word.length - 2) * 5;
+
+  const earnedScore = baseScore * multiplier;
+
+  player.score += earnedScore;
+
+  return {
+    earnedScore,
+    multiplier
+  };
+}
+
+// ==============================
+// 6. 턴 관리
+// ==============================
+
+function stopTimer(room) {
+  if (room.timer) {
+    clearInterval(room.timer);
+    room.timer = null;
+  }
+}
+
+function nextTurn(room) {
+  if (room.players.length === 0) return;
+
+  room.turn = (room.turn + 1) % room.players.length;
+
+  // 다음 차례의 제한 시간 초기화
+  room.seconds = getTurnTime(room);
+
+  sendState(room);
+}
+
+// ==============================
+// 7. 타이머
+// ==============================
+
+function startTimer(room) {
+  stopTimer(room);
+
+  room.timer = setInterval(() => {
+    if (room.status !== "playing") return;
+
+    room.seconds--;
+
+    if (room.seconds <= 0) {
+      const player = room.players[room.turn];
+
+      // 시간 초과 감점
+      failTurn(room);
+
+      io.to(room.code).emit(
+        "notice",
+        `${player?.name || "플레이어"} 시간 초과! 현재 점수의 20% 감점`
+      );
+
+      // 탈락하지 않고 다음 플레이어로 이동
+      nextTurn(room);
+
+      return;
+    }
+
+    sendState(room);
+
+  }, 1000);
+}
+
+// ==============================
+// 8. 소켓 연결
+// ==============================
 
 io.on("connection", socket => {
 
-  // ---------------------------------
-  // 방 생성
-  // ---------------------------------
+  // ------------------------------
+  // 방 만들기
+  // ------------------------------
 
-  socket.on("create", name => {
-    name = String(name || "").trim().slice(0, 12) || "플레이어";
+  socket.on("create", data => {
+    const name = typeof data === "string"
+      ? data
+      : data?.name;
 
-    let code;
+    if (!name || !name.trim()) {
+      socket.emit("errorMsg", "닉네임을 입력해 주세요.");
+      return;
+    }
 
-    do {
-      code = crypto.randomBytes(2).toString("hex").toUpperCase();
-    } while (rooms.has(code));
+    const code = makeRoomCode();
 
-    const p = {
-      id: socket.id,
-      name,
-      score: 0,
-      connected: true
-    };
-
-    const r = {
+    const room = {
       code,
-      players: [p],
+      host: socket.id,
+
+      players: [{
+        id: socket.id,
+        name: name.trim(),
+        score: 0,
+        combo: 0,
+        connected: true
+      }],
 
       status: "waiting",
       turn: 0,
       word: "",
       seconds: 20,
-
-      // 성공한 단어 수
       chainCount: 0,
-
-      host: socket.id,
-      timer: null,
-      used: new Set()
+      usedWords: new Set(),
+      timer: null
     };
 
-    rooms.set(code, r);
+    rooms.set(code, room);
 
     socket.join(code);
     socket.data.room = code;
-    socket.data.player = socket.id;
 
-    socket.emit("created", code);
-
-    emitRoom(r);
+    socket.emit("created", publicRoom(room));
+    sendState(room);
   });
 
-  // ---------------------------------
-  // 방 입장
-  // ---------------------------------
+  // ------------------------------
+  // 방 참가
+  // ------------------------------
 
-  socket.on("join", ({ code, name } = {}) => {
-    code = String(code || "").toUpperCase().trim();
-    name = String(name || "").trim().slice(0, 12) || "플레이어";
+  socket.on("join", data => {
+    const code = String(data?.code || "").toUpperCase();
+    const name = data?.name;
 
-    const r = getRoom(code);
+    const room = getRoom(code);
 
-    if (!r) {
-      return socket.emit(
-        "errorMsg",
-        "방 코드가 올바르지 않습니다."
-      );
-    }
-
-    if (r.status !== "waiting") {
-      return socket.emit(
-        "errorMsg",
-        "이미 게임이 시작된 방입니다."
-      );
-    }
-
-    if (r.players.length >= 8) {
-      return socket.emit(
-        "errorMsg",
-        "방 인원이 가득 찼습니다. (최대 8명)"
-      );
-    }
-
-    if (r.players.some(p => p.name === name)) {
-      name = name.slice(0, 9) + "_" + Math.floor(Math.random() * 99);
-    }
-
-    const p = {
-      id: socket.id,
-      name,
-      score: 0,
-      connected: true
-    };
-
-    r.players.push(p);
-
-    socket.join(code);
-    socket.data.room = code;
-    socket.data.player = socket.id;
-
-    emitRoom(r);
-
-    io.to(code).emit(
-      "notice",
-      `${name}님이 입장했습니다.`
-    );
-  });
-
-  // ---------------------------------
-  // 게임 시작
-  // ---------------------------------
-
-  socket.on("start", () => {
-    const r = getRoom(socket.data.room);
-
-    if (!r || r.host !== socket.id) return;
-
-    if (r.players.length < 2) {
-      return socket.emit(
-        "errorMsg",
-        "2명 이상 모여야 시작할 수 있어요."
-      );
-    }
-
-    if (r.status !== "waiting") return;
-
-    r.status = "playing";
-
-    r.turn = 0;
-    r.word = "";
-
-    r.chainCount = 0;
-    r.seconds = 20;
-
-    r.used.clear();
-
-    stopTimer(r);
-
-    emitRoom(r);
-
-    io.to(r.code).emit(
-      "notice",
-      "게임 시작! 20초 안에 단어를 입력하세요."
-    );
-
-    // 1초마다 점수와 시간 갱신
-    r.timer = setInterval(() => {
-
-      if (r.status !== "playing") return;
-
-      const currentPlayer = r.players[r.turn];
-
-      if (!currentPlayer) return;
-
-      // 제한 시간 감소
-      r.seconds--;
-
-      // 현재 플레이어 점수 감소
-      currentPlayer.score = Math.max(
-        0,
-        currentPlayer.score - 1
-      );
-
-      // 시간 초과
-      if (r.seconds <= 0) {
-
-        io.to(r.code).emit(
-          "notice",
-          `${currentPlayer.name}님 시간 초과!`
-        );
-
-        nextTurn(r);
-
-      } else {
-        emitRoom(r);
-      }
-
-    }, 1000);
-  });
-
-  // ---------------------------------
-  // 단어 입력
-  // ---------------------------------
-
-  socket.on("word", raw => {
-    const r = getRoom(socket.data.room);
-
-    if (!r || r.status !== "playing") return;
-
-    const p = r.players[r.turn];
-
-    // 현재 차례 확인
-    if (!p || p.id !== socket.id) {
-      return socket.emit(
-        "errorMsg",
-        "지금은 당신의 차례가 아닙니다."
-      );
-    }
-
-    const w = cleanWord(raw);
-
-    // 글자 수 검사
-    if (w.length < 2 || w.length > 10) {
-      return socket.emit(
-        "errorMsg",
-        "2~10글자 한글 단어를 입력하세요."
-      );
-    }
-
-    // 단어장 검사
-    if (!dictionary.has(w)) {
-      return socket.emit(
-        "errorMsg",
-        "단어장에 없는 단어예요. 다른 단어를 입력해 보세요."
-      );
-    }
-
-    // 끝말잇기 규칙 검사
-    if (r.word && w[0] !== r.word[r.word.length - 1]) {
-      return socket.emit(
-        "errorMsg",
-        `'${r.word[r.word.length - 1]}'(으)로 시작해야 해요.`
-      );
-    }
-
-    // 중복 단어 검사
-    if (r.used.has(w)) {
-      return socket.emit(
-        "errorMsg",
-        "이미 사용한 단어입니다."
-      );
-    }
-
-    // 단어 등록
-    r.used.add(w);
-    r.word = w;
-
-    // 점수 획득
-    p.score += 10;
-
-    // 성공한 단어 수 증가
-    r.chainCount++;
-
-    // 단어 성공 알림
-    io.to(r.code).emit("wordPlayed", {
-      name: p.name,
-      word: w,
-      score: p.score
-    });
-
-    // 다음 플레이어 차례
-    nextTurn(r);
-  });
-
-  // ---------------------------------
-  // 차례 넘기기
-  // ---------------------------------
-
-  socket.on("pass", () => {
-    const r = getRoom(socket.data.room);
-
-    if (!r || r.status !== "playing") return;
-
-    if (r.players[r.turn]?.id !== socket.id) {
-      return socket.emit(
-        "errorMsg",
-        "지금은 당신의 차례가 아닙니다."
-      );
-    }
-
-    io.to(r.code).emit(
-      "notice",
-      `${r.players[r.turn].name}님이 넘겼습니다.`
-    );
-
-    nextTurn(r);
-  });
-
-  // ---------------------------------
-  // 연결 종료
-  // ---------------------------------
-
-  socket.on("disconnect", () => {
-    const r = getRoom(socket.data.room);
-
-    if (!r) return;
-
-    const idx = r.players.findIndex(
-      p => p.id === socket.id
-    );
-
-    if (idx < 0) return;
-
-    const p = r.players[idx];
-    const wasCurrentTurn = r.turn === idx;
-
-    io.to(r.code).emit(
-      "notice",
-      `${p.name}님 연결이 끊겼습니다.`
-    );
-
-    // 대기 중 연결 종료
-    if (r.status === "waiting") {
-
-      r.players.splice(idx, 1);
-
-      if (!r.players.length) {
-        stopTimer(r);
-        rooms.delete(r.code);
-        return;
-      }
-
-      if (r.host === socket.id) {
-        r.host = r.players[0].id;
-      }
-
-      emitRoom(r);
+    if (!room) {
+      socket.emit("errorMsg", "존재하지 않는 방입니다.");
       return;
     }
 
-    // 게임 중 연결 종료
-    if (r.status === "playing") {
+    if (!name || !name.trim()) {
+      socket.emit("errorMsg", "닉네임을 입력해 주세요.");
+      return;
+    }
 
-      r.players.splice(idx, 1);
+    if (room.status !== "waiting") {
+      socket.emit("errorMsg", "이미 게임이 시작된 방입니다.");
+      return;
+    }
 
-      if (!r.players.length) {
-        stopTimer(r);
-        rooms.delete(r.code);
-        return;
-      }
+    if (room.players.length >= 8) {
+      socket.emit("errorMsg", "방이 가득 찼습니다.");
+      return;
+    }
 
-      if (wasCurrentTurn) {
-        // 현재 차례 플레이어가 나간 경우
-        r.turn = idx % r.players.length;
-        r.seconds = getTurnTime(r);
+    room.players.push({
+      id: socket.id,
+      name: name.trim(),
+      score: 0,
+      combo: 0,
+      connected: true
+    });
 
-        emitRoom(r);
+    socket.join(code);
+    socket.data.room = code;
 
-        io.to(r.code).emit(
-          "notice",
-          `${r.players[r.turn].name}님의 차례입니다.`
+    sendState(room);
+  });
+
+  // ------------------------------
+  // 게임 시작
+  // ------------------------------
+
+  socket.on("start", () => {
+    const room = getRoom(socket.data.room);
+
+    if (!room) return;
+
+    if (room.host !== socket.id) {
+      socket.emit("errorMsg", "방장만 게임을 시작할 수 있습니다.");
+      return;
+    }
+
+    if (room.status !== "waiting") return;
+
+    if (room.players.length < 2) {
+      socket.emit("errorMsg", "최소 2명이 있어야 시작할 수 있습니다.");
+      return;
+    }
+
+    room.status = "playing";
+    room.turn = 0;
+    room.word = "";
+    room.seconds = 20;
+    room.chainCount = 0;
+    room.usedWords.clear();
+
+    // 게임 시작 시 점수와 콤보 초기화
+    room.players.forEach(player => {
+      player.score = 0;
+      player.combo = 0;
+    });
+
+    sendState(room);
+    startTimer(room);
+  });
+
+  // ------------------------------
+  // 단어 입력
+  // ------------------------------
+
+  socket.on("word", data => {
+    const room = getRoom(socket.data.room);
+
+    if (!room || room.status !== "playing") return;
+
+    const player = room.players[room.turn];
+
+    if (!player || player.id !== socket.id) {
+      socket.emit("errorMsg", "현재 차례가 아닙니다.");
+      return;
+    }
+
+    const word = cleanWord(
+      typeof data === "string" ? data : data?.word
+    );
+
+    if (!/^[가-힣]{2,10}$/.test(word)) {
+      socket.emit("errorMsg", "2~10글자의 한글 단어를 입력해 주세요.");
+      return;
+    }
+
+    if (!dictionary.has(word)) {
+      socket.emit("errorMsg", "단어장에 없는 단어입니다.");
+      return;
+    }
+
+    if (room.usedWords.has(word)) {
+      socket.emit("errorMsg", "이미 사용한 단어입니다.");
+      return;
+    }
+
+    // 끝말잇기 및 두음법칙 검사
+    if (room.word) {
+      const lastChar = room.word[word.length === 0 ? 0 : room.word.length - 1];
+      const allowedChars = getAllowedFirstChars(lastChar);
+
+      if (!allowedChars.has(word[0])) {
+        socket.emit(
+          "errorMsg",
+          `"${lastChar}"(으)로 시작하는 단어를 입력해 주세요.`
         );
-
-      } else {
-        // 현재 차례보다 앞선 플레이어가 나간 경우
-        if (idx < r.turn) {
-          r.turn--;
-        }
-
-        emitRoom(r);
+        return;
       }
     }
 
+    // 단어 사용 처리
+    room.usedWords.add(word);
+    room.word = word;
+
+    // 점수 지급
+    const result = rewardPlayer(player, word);
+
+    // 연속 성공 단어 수 증가
+    room.chainCount++;
+
+    io.to(room.code).emit("wordPlayed", {
+      name: player.name,
+      word,
+      score: result.earnedScore,
+      totalScore: player.score,
+      combo: player.combo,
+      multiplier: result.multiplier
+    });
+
+    // 다음 플레이어
+    nextTurn(room);
+  });
+
+  // ------------------------------
+  // 패스
+  // ------------------------------
+
+  socket.on("pass", () => {
+    const room = getRoom(socket.data.room);
+
+    if (!room || room.status !== "playing") return;
+
+    const player = room.players[room.turn];
+
+    if (!player || player.id !== socket.id) {
+      socket.emit("errorMsg", "현재 차례가 아닙니다.");
+      return;
+    }
+
+    failTurn(room);
+
+    io.to(room.code).emit(
+      "notice",
+      `${player.name} 패스! 현재 점수의 20% 감점`
+    );
+
+    nextTurn(room);
+  });
+
+  // ------------------------------
+  // 접속 종료
+  // ------------------------------
+
+  socket.on("disconnect", () => {
+    const code = socket.data.room;
+    const room = getRoom(code);
+
+    if (!room) return;
+
+    const index = room.players.findIndex(
+      player => player.id === socket.id
+    );
+
+    if (index === -1) return;
+
+    room.players.splice(index, 1);
+
+    if (room.players.length === 0) {
+      stopTimer(room);
+      rooms.delete(code);
+      return;
+    }
+
+    // 방장이 나가면 첫 번째 플레이어에게 방장 권한 이전
+    if (room.host === socket.id) {
+      room.host = room.players[0].id;
+    }
+
+    if (room.status === "playing") {
+      if (index < room.turn) {
+        room.turn--;
+      } else if (index === room.turn) {
+        room.turn = index % room.players.length;
+        room.seconds = getTurnTime(room);
+      }
+    }
+
+    sendState(room);
   });
 
 });
 
-// =====================================
-// 4. 서버 실행
-// =====================================
+// ==============================
+// 9. 서버 실행
+// ==============================
 
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log(`Kkutu Web server listening on ${PORT}`);
+  console.log(`서버 실행 중: ${PORT}`);
 });
